@@ -1,128 +1,95 @@
 # ✈️ Airline Route Analysis - README
 
-## 📦 What We Have
+## Overview
 
-We are working with raw data from **three datasets**:
+This project analyzes U.S. domestic flight data to identify the top 5 round-trip airline routes worth investing in. The selection is based on profitability, operational efficiency, and reliability.
 
-* **Flights**: Q1 2019 flight data — includes date, origin, destination, distance, flight number, air time, occupancy rate
-* **Tickets**: Q1 2019 ticket data — includes itinerary details and fare information
-* **Airports**: Airport metadata — includes airport code, city, country, coordinates
+## Data Sources
 
-## 🎯 Objective
+We use three datasets from Q1 2019:
 
-To identify and recommend the **top 5 round-trip airline routes** to invest in, based on:
+* **Flights**: Flight details such as date, origin, destination, distance, flight number, air time, and occupancy rate
+* **Tickets**: Sample ticket data including fare and passenger counts
+* **Airports**: Airport codes and locations (city, country, coordinates)
 
-* Profitability
-* Operational efficiency
-* Reliability
+## Goal
 
-We work under the scenario of helping an airline company evaluate opportunities to enter the US domestic market.
+Help an airline evaluate potential domestic routes by identifying high-performing round-trip markets.
 
 ---
 
-## 🧹 Step 1: Data Cleaning
+## Step 1: Data Cleaning
 
-### ✅ Data Type Validation
+We first cleaned the data to ensure accuracy and compatibility:
 
-We started with identifying and converting incorrect data types. For instance:
+* Fixed incorrect data types (e.g., converted strings to numeric types)
+* Removed non-numeric characters (e.g., "\$", commas, spelled-out numbers)
+* Standardized missing values using `pd.NA`
 
-| Column     | Current Type | Expected Type | Issue                      | Action                                 |
-| ---------- | ------------ | ------------- | -------------------------- | -------------------------------------- |
-| AIR\_TIME  | object       | float64       | Non-numeric/missing values | Remove non-numeric characters, convert |
-| DISTANCE   | object       | float64       | Same                       | Same                                   |
-| FL\_DATE   | object       | datetime64    | Needs format conversion    | Use `errors='coerce'` to clean         |
-| ITIN\_FARE | object       | float64       | Contains "\$", ",", etc.   | Remove symbols, convert to float       |
-
-Used regex to identify non-numeric characters:
+Example fix using regular expressions:
 
 ```python
 str_series = series.astype(str)
 non_numeric = str_series.str.findall(r'[^0-9.-]')
 ```
 
-Cleaned issues include:
+---
 
-* `$`, `***`, `nan`, spelled-out numbers ("Twenty")
-* Converted missing values to `pd.NA`
+## Step 2: Filter Relevant Records
+
+* Removed canceled flights
+* Kept only flights between medium and large airports
+* Reduced data size and excluded outliers caused by irrelevant records
 
 ---
 
-## 🔍 Step 2: Filter Business-Relevant Data
+## Step 3: Outlier & Quality Check
 
-* Remove canceled flights
-* Keep only relevant airports (medium/large)
+Using IQR and scatter plots, we identified:
 
-Benefits:
-
-* Reduce size for faster processing
-* Prevent misleading outliers
+* Negative or unrealistic values (e.g., 49-hour delays, \$38,000 fares)
+* Correlation between flight time and distance (r = 0.97), used to validate outlier detection
 
 ---
 
-## 📊 Step 3: Outlier Detection & Quality Check
+## Step 4: Route\_ID Generation
 
-* Detected:
+We standardized round trips using a unified `Route_ID`, combining outbound and return flights (e.g., JFK-ORD).
 
-  * Negative flight times/distances
-  * Outrageous fares (\$38,400), 681 passengers per ticket
-  * Unrealistic delays (49 hours)
-* Used IQR method and scatter plots (e.g. air\_time vs distance, correlation = 0.97)
+Assumptions:
 
----
-
-## 🛫 Step 4: Route\_ID Generation
-
-### Why?
-
-To standardize round-trip routes: JFK → ORD and ORD → JFK = `JFK-ORD`
-
-### Assumptions:
-
-* Profit and demand are symmetric for round-trip directions
-* No missing legs in route pair
-* Direct flights only
-
-Checked that airport codes in `Flights` and `Tickets` exist in `Airports` dataset before proceeding.
+* Round-trip directions are symmetric in demand and revenue
+* All flights are direct
+* Airports match across datasets
 
 ---
 
-## 🧩 Step 5: Handling Missing Values
+## Step 5: Handling Missing Values
 
-### Key Columns:
+Key columns: `AIR_TIME`, `DISTANCE`, `ITIN_FARE`, `PASSENGERS`
 
-* AIR\_TIME, DISTANCE, ITIN\_FARE, PASSENGERS
+Approach:
 
-### Strategy:
+* Grouped by `Route_ID`
+* Imputed missing values using group median (if sufficient data)
+* Dropped routes with excessive missing data
 
-* Group by `Route_ID`
-* If group has valid values, fill missing with median
-* If mostly missing → drop the route
+Special cases:
 
-### Assumptions:
-
-* Data per route is normally/symmetrically distributed
-* Median is preferred over mean (handles skewed data, avoids outlier influence)
-
-### Special Handling:
-
-* If both `ARR_DELAY` and `DEP_DELAY` missing, set `ARR_DELAY = 0`
-* Delete `FL_DATE` and `OCCUPANCY_RATE` due to low coverage or better usage elsewhere
+* Filled missing arrival delays based on departure delays or set to 0
+* Dropped `FL_DATE` and `OCCUPANCY_RATE` if coverage was too low
 
 ---
 
-## 🔗 Step 6: Table Joining
+## Step 6: Merging Datasets
 
-### Feasibility Check:
+We joined the datasets on `(Route_ID, Year, Quarter)` after verifying:
 
-* **Route Overlap**: \~99% overlap between Flights and Tickets
-* **Time Alignment**: Both datasets = Q1 2019
-* **Airline Coverage**: 20/26 (Flights), 20/21 (Tickets)
+* \~99% route overlap
+* Time alignment (Q1 2019)
+* Airline coverage in both Flights and Tickets datasets
 
-### Aggregation Level:
-
-* Granularity = Year, Quarter, Route\_ID
-
-### Aggregation Methods:
+Aggregation level:
 
 ```python
 {
@@ -130,58 +97,57 @@ Checked that airport codes in `Flights` and `Tickets` exist in `Airports` datase
   'AIR_TIME': 'mean',
   'DEP_DELAY': 'mean',
   'OCCUPANCY_RATE': 'mean',
-  'FL_DATE': 'count'  # total flights = route activity
+  'FL_DATE': 'count'  # Number of flights per route
 }
 ```
 
-### Joining Strategy:
+Join Strategy:
 
-* Flights + Airports (origin/dest) = Left Join
-* Tickets + Airports = Left Join
-* Final: Flights + Tickets = Inner Join on (Route\_ID, Year, Quarter)
-
----
-
-## 📈 Key Tasks
-
-### Task 1: Busiest Round-Trip Route
-
-* Based on total number of round-trips per route
-
-### Task 2: Most Profitable Round-Trip Route
-
-* Initial Metric: Total Profit → favors high-demand routes
-* Final Metric: **Avg Profit per Flight per Route per Quarter**
-
-  * Balanced supply/demand view
-  * Revenue = (avg\_fare / 2) \* passengers
-
-### Task 3: Multi-Factor Route Evaluation
-
-* Considerations:
-
-  * Total Profit & Margin
-  * Flight Frequency (Market Size)
-  * Occupancy Rate (Service & Competency)
-  * Delay Control (Risk & Customer Impact)
-
-### Task 4: Investment Recommendation
-
-* Assumption: One plane per route → \$90M × 5 = \$450M
-* Assumes equal seasonal profit; future steps could add seasonality and discount rate factors
-* Must validate round-trip balance (e.g., JFK → ORD = ORD → JFK)
+* Flights + Airports (origin/destination): Left Join
+* Tickets + Airports: Left Join
+* Flights + Tickets: Inner Join on Route\_ID, Year, Quarter
 
 ---
 
-## 📝 Future Improvements
+## Analysis Tasks
 
-* Consider seasonality and dynamic demand
-* Refine route balancing
-* Introduce NPV/ROI calculations for aircraft investment
+### 1. Busiest Route
+
+* Based on total number of round-trip flights
+
+### 2. Most Profitable Route
+
+* Initial approach: total profit
+* Refined approach: average profit per flight per quarter
+
+  * Revenue = (average fare / 2) × passengers
+
+### 3. Multi-Factor Evaluation
+
+Metrics considered:
+
+* Profit and profit margin
+* Flight frequency (demand)
+* Occupancy rate (efficiency)
+* Delay rates (reliability and cost)
+
+### 4. Investment Recommendation
+
+* Assumed 1 aircraft per route (\$90M each → \$450M total)
+* Did not adjust for seasonality (future work)
+* Ensured route symmetry (equal outbound/inbound flights)
 
 ---
 
-## 📂 File Structure (suggested)
+## Future Improvements
+
+* Factor in seasonality and time trends
+* Refine route symmetry validation
+* Incorporate NPV/ROI and discounting in investment planning
+
+---
+
+## Suggested File Structure
 
 ```bash
 project_root/
@@ -197,8 +163,4 @@ project_root/
 │   ├── cleaned_data.csv
 │   └── route_summary.csv
 └── README.md
-```
 
----
-
-Feel free to open issues or contribute to further route evaluation logic!
