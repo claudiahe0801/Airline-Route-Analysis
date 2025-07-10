@@ -26,13 +26,6 @@ We first cleaned the data to ensure accuracy and compatibility:
 * Removed non-numeric characters (e.g., "\$", commas, spelled-out numbers)
 * Standardized missing values using `pd.NA`
 
-Example fix using regular expressions:
-
-```python
-str_series = series.astype(str)
-non_numeric = str_series.str.findall(r'[^0-9.-]')
-```
-
 ---
 
 ## Step 2: Filter Relevant Records
