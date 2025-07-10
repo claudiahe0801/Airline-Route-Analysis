@@ -1,4 +1,4 @@
-# ✈️ Airline Route Analysis - README
+# ✈️ Airline Route Analysis
 
 ## Overview
 
